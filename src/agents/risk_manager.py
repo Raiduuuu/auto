@@ -1,14 +1,31 @@
 """
 Risk Manager Agent - Manages risk and position sizing
+
+Enhanced with Advanced Risk Management features:
+- Kelly Criterion position sizing
+- Portfolio VaR calculations
+- Circuit breakers
+- Emergency protocols
 """
 from typing import Any, Dict, Optional
 from ..core.base_agent import BaseAgent, AgentMessage, AgentRole
+from ..advanced.analysis.advanced_risk import (
+    AdvancedRiskManager,
+    MarketConditions,
+    Position,
+)
 
 
 class RiskManagerAgent(BaseAgent):
     """
     Agent specialized in risk management and position sizing.
     Ensures trades comply with risk parameters.
+
+    Enhanced with AdvancedRiskManager for:
+    - Dynamic Kelly Criterion position sizing
+    - Portfolio VaR calculations
+    - Circuit breakers and emergency protocols
+    - Correlation and liquidity risk analysis
     """
 
     def __init__(
@@ -16,7 +33,8 @@ class RiskManagerAgent(BaseAgent):
         llm_client: Any = None,
         max_risk_per_trade: float = 1.0,
         max_daily_loss: float = 5.0,
-        max_drawdown: float = 10.0
+        max_drawdown: float = 10.0,
+        use_advanced: bool = True
     ):
         super().__init__(
             name="RiskManager",
@@ -29,6 +47,18 @@ class RiskManagerAgent(BaseAgent):
         self.max_drawdown = max_drawdown
         self.daily_pnl = 0.0
         self.open_positions = []
+        self.use_advanced = use_advanced
+
+        # Initialize Advanced Risk Manager
+        if use_advanced:
+            self.advanced_risk = AdvancedRiskManager(
+                max_portfolio_risk=max_risk_per_trade / 100,
+                max_single_position=max_risk_per_trade / 200,
+                max_daily_loss=max_daily_loss / 100,
+                max_drawdown=max_drawdown / 100,
+            )
+        else:
+            self.advanced_risk = None
 
     def get_system_prompt(self) -> str:
         return """You are an expert Risk Manager for a trading operation.
@@ -63,6 +93,7 @@ Be conservative and always prioritize capital preservation.""".format(
     async def analyze(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Perform risk analysis on proposed trade.
+        Uses AdvancedRiskManager when available for enhanced analysis.
         """
         market_data = data.get("market_data", {})
         analyses = data.get("analyses", {})
@@ -74,6 +105,13 @@ Be conservative and always prioritize capital preservation.""".format(
         atr = market_data.get("atr", 0)
         instrument = market_data.get("instrument", "DE40")
 
+        # Use advanced risk manager if available
+        if self.use_advanced and self.advanced_risk:
+            return await self._analyze_advanced(
+                market_data, analyses, account, instrument, balance, current_price, atr
+            )
+
+        # Fallback to basic analysis
         # Calculate position size
         position_sizing = self._calculate_position_size(
             balance=balance,
@@ -103,6 +141,129 @@ Be conservative and always prioritize capital preservation.""".format(
             "risk_assessment": risk_assessment,
             "limits_check": limits_check,
             "approval": approval
+        }
+
+    async def _analyze_advanced(
+        self,
+        market_data: Dict[str, Any],
+        analyses: Dict[str, Any],
+        account: Dict[str, Any],
+        instrument: str,
+        balance: float,
+        current_price: float,
+        atr: float
+    ) -> Dict[str, Any]:
+        """
+        Perform advanced risk analysis using AdvancedRiskManager.
+        """
+        # Calculate prediction confidence from analyses
+        confidences = []
+        for agent_name, analysis in analyses.items():
+            if isinstance(analysis, dict) and "signal" in analysis:
+                conf = analysis["signal"].get("confidence", 0.5)
+                confidences.append(conf)
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.5
+
+        # Create market conditions
+        market_conditions = MarketConditions(
+            volatility=atr / current_price if current_price > 0 else 0.02,
+            liquidity=0.7,  # Default, would be from market data
+            trend_strength=0.0,  # Would be calculated from indicators
+            correlation_regime="mixed",
+            spread_pct=market_data.get("spread_pct", 0.0001),
+        )
+
+        # Check for emergency conditions
+        emergency_action = self.advanced_risk.emergency_protocols(market_conditions)
+        if emergency_action.action == "halt_trading":
+            return {
+                "agent": self.name,
+                "instrument": instrument,
+                "position_sizing": {"position_size": 0, "risk_amount": 0},
+                "risk_assessment": {"risk_level": "critical", "risk_score": 100},
+                "limits_check": {"can_trade": False},
+                "approval": {
+                    "approved": False,
+                    "reason": f"Emergency halt: {emergency_action.reason}"
+                },
+                "emergency_action": emergency_action.__dict__
+            }
+
+        # Determine trade direction from analyses
+        direction = "long"  # Default
+        buy_votes = 0
+        sell_votes = 0
+        for agent_name, analysis in analyses.items():
+            if isinstance(analysis, dict) and "signal" in analysis:
+                signal_dir = analysis["signal"].get("direction", "HOLD")
+                if signal_dir == "BUY":
+                    buy_votes += 1
+                elif signal_dir == "SELL":
+                    sell_votes += 1
+        if sell_votes > buy_votes:
+            direction = "short"
+
+        # Get advanced risk assessment
+        risk_assessment = self.advanced_risk.assess_trade(
+            instrument=instrument,
+            direction=direction,
+            entry_price=current_price,
+            prediction_confidence=avg_confidence,
+            market_conditions=market_conditions,
+            account_balance=balance,
+            atr=atr if atr > 0 else current_price * 0.01,
+        )
+
+        # Convert to expected format
+        position_sizing = {
+            "position_size": round(risk_assessment.position_size / current_price, 4) if current_price > 0 else 0,
+            "risk_amount": round(risk_assessment.total_risk * balance, 2),
+            "risk_percent": risk_assessment.total_risk * 100,
+            "stop_loss": round(risk_assessment.stop_loss, 2),
+            "take_profit": round(risk_assessment.take_profit, 2),
+            "stop_distance": abs(current_price - risk_assessment.stop_loss),
+            "risk_reward_ratio": 1.5
+        }
+
+        risk_info = {
+            "risk_score": int(risk_assessment.total_risk * 100),
+            "risk_level": "high" if risk_assessment.total_risk > 0.015 else "medium" if risk_assessment.total_risk > 0.008 else "low",
+            "exposure_percent": round(risk_assessment.position_size / balance * 100, 2) if balance > 0 else 0,
+            "avg_confidence": round(avg_confidence, 2),
+            "open_positions": len(self.open_positions),
+            "var_contribution": risk_assessment.var_contribution,
+            "correlation_risk": risk_assessment.correlation_risk,
+            "liquidity_risk": risk_assessment.liquidity_risk,
+        }
+
+        # Get portfolio risk metrics
+        portfolio_metrics = self.advanced_risk.assess_portfolio_risk()
+
+        limits_check = self._check_limits(balance)
+        limits_check["portfolio_var_95"] = portfolio_metrics.portfolio_var_95
+        limits_check["current_drawdown"] = portfolio_metrics.current_drawdown
+        limits_check["sharpe_ratio"] = portfolio_metrics.sharpe_ratio
+
+        approval = {
+            "approved": risk_assessment.approved,
+            "reason": risk_assessment.reason,
+            "warnings": risk_assessment.warnings,
+            "risk_level": risk_info["risk_level"],
+            "confidence": avg_confidence
+        }
+
+        return {
+            "agent": self.name,
+            "instrument": instrument,
+            "position_sizing": position_sizing,
+            "risk_assessment": risk_info,
+            "limits_check": limits_check,
+            "approval": approval,
+            "portfolio_metrics": portfolio_metrics.to_dict(),
+            "market_conditions": {
+                "volatility": market_conditions.volatility,
+                "liquidity": market_conditions.liquidity,
+            }
         }
 
     def _calculate_position_size(

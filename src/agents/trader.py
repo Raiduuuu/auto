@@ -1,18 +1,31 @@
 """
 Trader Agent - Executes trading decisions
+
+Enhanced with Advanced Prediction Engine features:
+- Multi-horizon ensemble predictions
+- Uncertainty quantification
+- Prediction calibration
 """
 from typing import Any, Dict, Optional
 from datetime import datetime
+import numpy as np
 from ..core.base_agent import BaseAgent, AgentMessage, AgentRole, TradingSignal
+from ..advanced.prediction.advanced_prediction import AdvancedPredictionEngine
 
 
 class TraderAgent(BaseAgent):
     """
     Agent specialized in making final trading decisions and execution.
     Synthesizes inputs from all other agents.
+
+    Enhanced with AdvancedPredictionEngine for:
+    - Multi-horizon price predictions
+    - Ensemble model predictions
+    - Uncertainty quantification
+    - Prediction calibration
     """
 
-    def __init__(self, llm_client: Any = None):
+    def __init__(self, llm_client: Any = None, use_advanced: bool = True):
         super().__init__(
             name="Trader",
             role=AgentRole.TRADER,
@@ -21,6 +34,19 @@ class TraderAgent(BaseAgent):
         )
         self.pending_orders = []
         self.executed_orders = []
+        self.use_advanced = use_advanced
+
+        # Initialize Advanced Prediction Engine
+        if use_advanced:
+            self.prediction_engine = AdvancedPredictionEngine(
+                input_dim=20,
+                horizons=["1min", "5min", "15min", "1h", "4h", "1d"]
+            )
+        else:
+            self.prediction_engine = None
+
+        # Learning state
+        self.prediction_history = []
 
     def get_system_prompt(self) -> str:
         return """You are an expert Trader responsible for final trading decisions.
@@ -49,6 +75,7 @@ Be decisive but disciplined. Document every decision clearly."""
     async def analyze(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Make final trading decision based on all inputs.
+        Uses AdvancedPredictionEngine when available for enhanced analysis.
         """
         analyses = data.get("analyses", {})
         market_data = data.get("market_data", {})
@@ -62,6 +89,14 @@ Be decisive but disciplined. Document every decision clearly."""
 
         # Check risk approval
         risk_approved = risk_assessment.get("approval", {}).get("approved", False)
+
+        # Get advanced predictions if available
+        advanced_predictions = None
+        if self.use_advanced and self.prediction_engine:
+            features = self._extract_features(market_data)
+            advanced_predictions = self._get_advanced_predictions(features)
+            # Enhance signals with prediction engine output
+            signals = self._enhance_signals_with_predictions(signals, advanced_predictions)
 
         # Make final decision
         decision = self._make_decision(signals, risk_approved, risk_assessment)
@@ -81,7 +116,17 @@ Be decisive but disciplined. Document every decision clearly."""
         if self.llm_client:
             reasoning = await self._get_llm_decision(analyses, decision)
 
-        return {
+        # Store prediction for learning
+        if advanced_predictions:
+            self.prediction_history.append({
+                "timestamp": datetime.utcnow(),
+                "instrument": instrument,
+                "predictions": advanced_predictions,
+                "decision": decision["action"],
+                "current_price": current_price,
+            })
+
+        result = {
             "agent": self.name,
             "instrument": instrument,
             "decision": decision,
@@ -90,6 +135,126 @@ Be decisive but disciplined. Document every decision clearly."""
             "reasoning": reasoning,
             "timestamp": datetime.utcnow().isoformat()
         }
+
+        # Add advanced prediction info
+        if advanced_predictions:
+            result["advanced_predictions"] = advanced_predictions
+            result["recommended_horizon"] = advanced_predictions.get("recommended_horizon", "1h")
+
+        return result
+
+    def _extract_features(self, market_data: Dict[str, Any]) -> np.ndarray:
+        """Extract features for prediction engine."""
+        features = []
+
+        # Price features
+        indicators = market_data.get("indicators", {})
+        ohlcv = market_data.get("ohlcv", {})
+
+        # Current price
+        features.append(market_data.get("current_price", 0))
+
+        # Moving averages
+        for ma in ["sma_20", "sma_50", "ema_12", "ema_26"]:
+            features.append(indicators.get(ma, 0))
+
+        # Momentum indicators
+        features.append(indicators.get("rsi", 50))
+        features.append(indicators.get("macd", 0))
+        features.append(indicators.get("macd_signal", 0))
+
+        # Volatility
+        features.append(indicators.get("atr", 0))
+        features.append(indicators.get("bb_upper", 0))
+        features.append(indicators.get("bb_lower", 0))
+
+        # Volume
+        if "volume" in ohlcv and len(ohlcv["volume"]) > 0:
+            features.append(ohlcv["volume"][-1])
+        else:
+            features.append(0)
+
+        # Pad to expected input dim
+        while len(features) < 20:
+            features.append(0)
+
+        return np.array(features[:20], dtype=np.float64)
+
+    def _get_advanced_predictions(self, features: np.ndarray) -> Dict[str, Any]:
+        """Get multi-horizon predictions from prediction engine."""
+        if not self.prediction_engine:
+            return {}
+
+        try:
+            # Get multi-horizon prediction
+            multi_pred = self.prediction_engine.multi_horizon_prediction(features)
+
+            predictions = {}
+            for horizon, pred in multi_pred.predictions.items():
+                predictions[horizon] = {
+                    "value": pred.value,
+                    "confidence": pred.confidence,
+                    "uncertainty": pred.uncertainty,
+                }
+
+            return {
+                "horizons": predictions,
+                "dominant_direction": multi_pred.dominant_direction,
+                "consistency_score": multi_pred.consistency_score,
+                "recommended_horizon": multi_pred.recommended_horizon,
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _enhance_signals_with_predictions(
+        self,
+        signals: Dict[str, Any],
+        predictions: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Enhance analyst signals with prediction engine output."""
+        if not predictions or "error" in predictions:
+            return signals
+
+        # Get recommended horizon prediction
+        horizons = predictions.get("horizons", {})
+        recommended = predictions.get("recommended_horizon", "1h")
+
+        if recommended in horizons:
+            pred = horizons[recommended]
+            pred_value = pred["value"]
+            pred_confidence = pred["confidence"]
+
+            # Adjust signals based on prediction
+            if pred_value > 0.6 and pred_confidence > 0.5:
+                signals["buy_score"] += pred_confidence * 0.5
+                signals["prediction_boost"] = "bullish"
+            elif pred_value < 0.4 and pred_confidence > 0.5:
+                signals["sell_score"] += pred_confidence * 0.5
+                signals["prediction_boost"] = "bearish"
+            else:
+                signals["prediction_boost"] = "neutral"
+
+            # Adjust confidence based on consistency
+            consistency = predictions.get("consistency_score", 0.5)
+            signals["avg_confidence"] = (signals["avg_confidence"] + consistency) / 2
+            signals["prediction_confidence"] = pred_confidence
+            signals["prediction_uncertainty"] = pred.get("uncertainty", 0.5)
+
+        return signals
+
+    def learn_from_outcome(self, prediction_record: Dict[str, Any], actual_outcome: float):
+        """Learn from trade outcome to improve predictions."""
+        if not self.prediction_engine:
+            return
+
+        features = prediction_record.get("features")
+        if features is not None:
+            # Update prediction engine
+            self.prediction_engine.update_models(
+                features=features,
+                actual=actual_outcome,
+                horizon=prediction_record.get("horizon", "1h")
+            )
 
     def _aggregate_signals(self, analyses: Dict[str, Any]) -> Dict[str, Any]:
         """Aggregate signals from all analysts."""
