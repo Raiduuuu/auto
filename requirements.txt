@@ -10,6 +10,9 @@ pandas>=2.0.0
 numpy>=1.24.0
 ta>=0.10.2  # Technical Analysis library
 
+# Scientific Computing (for advanced components)
+scipy>=1.11.0  # Statistical functions, optimization
+
 # API & Networking
 aiohttp>=3.9.0
 requests>=2.31.0
@@ -34,3 +37,9 @@ asyncio-throttle>=1.0.2
 # Testing
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
+
+# Advanced Components Dependencies
+# (Used by src/advanced modules)
+# - scipy: Statistical functions, Granger causality tests
+# - numpy: Matrix operations, numerical computations
+# All other advanced features use pure Python/NumPy implementations
