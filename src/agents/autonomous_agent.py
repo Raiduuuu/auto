@@ -588,3 +588,31 @@ Ask: {quote.get('ask', 'N/A')}
             "model": self.model_name,
             "last_trade": self.trading_history[-1] if self.trading_history else None
         }
+
+    async def process_message(self, message) -> Optional[Any]:
+        """
+        Process incoming message from another agent.
+        The autonomous agent primarily operates independently, but can
+        respond to analysis requests.
+        """
+        from ..core.base_agent import AgentMessage
+
+        if message.message_type == "request_analysis":
+            # Run analysis on the requested data
+            data = message.content.get("data", {})
+            analysis = await self.analyze(data)
+
+            return AgentMessage(
+                sender=self.name,
+                receiver=message.sender,
+                content={"analysis": analysis},
+                message_type="analysis_response"
+            )
+
+        elif message.message_type == "market_update":
+            # Store market update in state
+            self.update_state("last_market_update", message.content)
+            return None
+
+        # Default: no response
+        return None
