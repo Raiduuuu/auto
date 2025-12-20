@@ -167,45 +167,63 @@ class PriceTool(BaseTool):
 
         indicator_values = {}
 
+        def safe_last_value(series_or_val, decimals=2):
+            """Safely extract last value from Series or return scalar."""
+            if series_or_val is None:
+                return None
+            if hasattr(series_or_val, 'iloc'):
+                # It's a pandas Series
+                if len(series_or_val) == 0:
+                    return None
+                val = series_or_val.iloc[-1]
+                if pd.isna(val):
+                    return None
+                return round(float(val), decimals)
+            else:
+                # It's a scalar
+                if pd.isna(series_or_val):
+                    return None
+                return round(float(series_or_val), decimals)
+
         for ind in indicators:
             try:
                 if ind.startswith("sma_"):
                     period = int(ind.split("_")[1])
                     values = TechnicalIndicators.sma(df["close"], period)
-                    indicator_values[ind] = round(values.iloc[-1], 2) if not values.empty else None
+                    indicator_values[ind] = safe_last_value(values)
                 elif ind.startswith("ema_"):
                     period = int(ind.split("_")[1])
                     values = TechnicalIndicators.ema(df["close"], period)
-                    indicator_values[ind] = round(values.iloc[-1], 2) if not values.empty else None
+                    indicator_values[ind] = safe_last_value(values)
                 elif ind == "rsi":
                     values = TechnicalIndicators.rsi(df["close"])
-                    indicator_values["rsi"] = round(values.iloc[-1], 2) if not values.empty else None
+                    indicator_values["rsi"] = safe_last_value(values)
                 elif ind == "macd":
                     macd_line, signal, hist = TechnicalIndicators.macd(df["close"])
                     indicator_values["macd"] = {
-                        "macd_line": round(macd_line.iloc[-1], 4) if not macd_line.empty else None,
-                        "signal": round(signal.iloc[-1], 4) if not signal.empty else None,
-                        "histogram": round(hist.iloc[-1], 4) if not hist.empty else None
+                        "macd_line": safe_last_value(macd_line, 4),
+                        "signal": safe_last_value(signal, 4),
+                        "histogram": safe_last_value(hist, 4)
                     }
                 elif ind == "atr":
                     values = TechnicalIndicators.atr(df["high"], df["low"], df["close"])
-                    indicator_values["atr"] = round(values.iloc[-1], 2) if not values.empty else None
+                    indicator_values["atr"] = safe_last_value(values)
                 elif ind == "bbands":
                     upper, middle, lower = TechnicalIndicators.bollinger_bands(df["close"])
                     indicator_values["bbands"] = {
-                        "upper": round(upper.iloc[-1], 2) if not upper.empty else None,
-                        "middle": round(middle.iloc[-1], 2) if not middle.empty else None,
-                        "lower": round(lower.iloc[-1], 2) if not lower.empty else None
+                        "upper": safe_last_value(upper),
+                        "middle": safe_last_value(middle),
+                        "lower": safe_last_value(lower)
                     }
                 elif ind == "stochastic":
                     k, d = TechnicalIndicators.stochastic(df["high"], df["low"], df["close"])
                     indicator_values["stochastic"] = {
-                        "k": round(k.iloc[-1], 2) if not k.empty else None,
-                        "d": round(d.iloc[-1], 2) if not d.empty else None
+                        "k": safe_last_value(k),
+                        "d": safe_last_value(d)
                     }
                 elif ind == "adx":
                     values = TechnicalIndicators.adx(df["high"], df["low"], df["close"])
-                    indicator_values["adx"] = round(values.iloc[-1], 2) if not values.empty else None
+                    indicator_values["adx"] = safe_last_value(values)
             except Exception as e:
                 logger.warning(f"Could not calculate {ind}: {e}")
                 indicator_values[ind] = None
