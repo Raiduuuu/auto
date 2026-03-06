@@ -4,7 +4,7 @@ Supports both classic multi-agent mode and AI-Trader inspired autonomous mode
 """
 import asyncio
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from loguru import logger
 
@@ -168,7 +168,7 @@ class AgentOrchestrator:
 
         # Store decision
         self.decision_history.append({
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "mode": "classic",
             "results": results
         })
@@ -186,7 +186,7 @@ class AgentOrchestrator:
 
         # Store decision
         self.decision_history.append({
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "mode": "autonomous",
             "results": results
         })
@@ -225,7 +225,7 @@ class AgentOrchestrator:
 
         # Store decision
         self.decision_history.append({
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "mode": "hybrid",
             "results": results
         })

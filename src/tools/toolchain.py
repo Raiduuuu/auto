@@ -3,7 +3,7 @@ Trading Toolchain - Unified interface for all MCP-style trading tools
 Inspired by AI-Trader's pure tool-driven architecture
 """
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from loguru import logger
 
 from .base_tool import BaseTool, ToolResult, ToolStatus
@@ -97,7 +97,7 @@ class TradingToolchain:
                 "tool": tool_name,
                 "params": kwargs,
                 "status": result.status.value,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             })
 
             return result

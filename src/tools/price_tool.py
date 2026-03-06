@@ -2,7 +2,7 @@
 Price Tool - Get market price data
 """
 from typing import Any, Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from loguru import logger
 import pandas as pd
 
@@ -103,7 +103,7 @@ class PriceTool(BaseTool):
                     "bid": quote.get("bid"),
                     "ask": quote.get("ask"),
                     "spread": quote.get("ask", 0) - quote.get("bid", 0),
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.now(timezone.utc).isoformat()
                 }
             except Exception:
                 pass
@@ -125,7 +125,7 @@ class PriceTool(BaseTool):
             "bid": round(bid, 2),
             "ask": round(bid + spread, 2),
             "spread": round(spread, 5),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "simulated": True
         }
 
@@ -286,7 +286,7 @@ class PriceTool(BaseTool):
         }
         minutes = timeframe_minutes.get(timeframe, 5)
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         for i in range(min(periods, 50)):
             # Random walk

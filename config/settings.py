@@ -14,7 +14,7 @@ class LLMSettings(BaseSettings):
     """LLM API Configuration"""
     anthropic_api_key: str = Field(default="", env="ANTHROPIC_API_KEY")
     openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
-    default_model: str = "claude-sonnet-4-20250514"
+    default_model: str = "claude-sonnet-4-6"
     max_tokens: int = 4096
     temperature: float = 0.7
 

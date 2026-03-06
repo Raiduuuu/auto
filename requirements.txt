@@ -1,14 +1,14 @@
 # TradingAgents - Multi-Agent LLM Trading Framework
-# Core dependencies
+# Updated March 2026
 
 # LLM Integration
-anthropic>=0.18.0
-openai>=1.12.0
+anthropic>=0.40.0       # AsyncAnthropic, tool use GA, Claude 4.6 support
+openai>=1.30.0          # AsyncOpenAI
 
 # Data Processing
-pandas>=2.0.0
-numpy>=1.24.0
-ta>=0.10.2  # Technical Analysis library
+pandas>=2.1.0
+numpy>=1.26.0
+ta>=0.10.2              # Technical Analysis library
 
 # API & Networking
 aiohttp>=3.9.0

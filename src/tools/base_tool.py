@@ -4,7 +4,7 @@ Base Tool - Foundation for MCP-style trading tools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -21,7 +21,7 @@ class ToolResult:
     status: ToolStatus
     data: Dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     execution_time_ms: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,13 +71,13 @@ class BaseTool(ABC):
 
     async def __call__(self, **kwargs) -> ToolResult:
         """Allow calling tool directly."""
-        import time
-        start = time.time()
+        from time import perf_counter
+        start = perf_counter()
 
         self.call_count += 1
-        self.last_call = datetime.utcnow()
+        self.last_call = datetime.now(timezone.utc)
 
         result = await self.execute(**kwargs)
-        result.execution_time_ms = (time.time() - start) * 1000
+        result.execution_time_ms = (perf_counter() - start) * 1000
 
         return result

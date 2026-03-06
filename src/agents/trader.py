@@ -2,7 +2,7 @@
 Trader Agent - Executes trading decisions
 """
 from typing import Any, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from ..core.base_agent import BaseAgent, AgentMessage, AgentRole, TradingSignal
 
 
@@ -88,7 +88,7 @@ Be decisive but disciplined. Document every decision clearly."""
             "order": order,
             "signals_summary": signals,
             "reasoning": reasoning,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     def _aggregate_signals(self, analyses: Dict[str, Any]) -> Dict[str, Any]:
@@ -208,7 +208,7 @@ Be decisive but disciplined. Document every decision clearly."""
             "take_profit": risk_data.get("take_profit", 0),
             "risk_amount": risk_data.get("risk_amount", 0),
             "status": "PENDING",
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
 
     async def _get_llm_decision(
@@ -249,7 +249,7 @@ Explain in 2-3 sentences why this is the correct decision."""
             if order.get("id") == order_id:
                 executed = self.pending_orders.pop(i)
                 executed["status"] = "EXECUTED"
-                executed["executed_at"] = datetime.utcnow().isoformat()
+                executed["executed_at"] = datetime.now(timezone.utc).isoformat()
                 self.executed_orders.append(executed)
                 return executed
         return None

@@ -1,9 +1,16 @@
 """
 Search Tool - Real-time market news and information search via Jina AI
 Inspired by AI-Trader's tool_jina_search.py
+
+Updated March 2026:
+- Jina s.jina.ai for web search
+- Jina r.jina.ai for URL content extraction (Reader API)
+- Jina DeepSearch API at deepsearch.jina.ai for deep research
+- Latest embedding model: jina-embeddings-v5-text-small
 """
 from typing import Any, Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import json
 import aiohttp
 import os
 from loguru import logger
@@ -14,7 +21,7 @@ from .base_tool import BaseTool, ToolResult, ToolStatus
 class SearchTool(BaseTool):
     """
     Tool for searching real-time market news and financial information.
-    Uses Jina AI for web search and content extraction.
+    Uses Jina AI for web search, content extraction, and deep research.
     """
 
     def __init__(self, api_key: Optional[str] = None):
@@ -25,6 +32,7 @@ class SearchTool(BaseTool):
         self.api_key = api_key or os.getenv("JINA_API_KEY")
         self.base_url = "https://s.jina.ai"
         self.reader_url = "https://r.jina.ai"
+        self.deepsearch_url = "https://deepsearch.jina.ai/v1/chat/completions"
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._cache_ttl = 300  # 5 minutes
 
@@ -38,9 +46,9 @@ class SearchTool(BaseTool):
                 },
                 "search_type": {
                     "type": "string",
-                    "enum": ["news", "analysis", "earnings", "general"],
+                    "enum": ["news", "analysis", "earnings", "general", "deepsearch"],
                     "default": "news",
-                    "description": "Type of search to perform"
+                    "description": "Type of search to perform (deepsearch for in-depth AI research)"
                 },
                 "instrument": {
                     "type": "string",
@@ -92,10 +100,15 @@ class SearchTool(BaseTool):
             )
 
         try:
-            results = await self._search(enhanced_query, max_results)
-
-            # Analyze sentiment of results
-            sentiment = self._analyze_results_sentiment(results)
+            # Use DeepSearch for in-depth research, regular search otherwise
+            if search_type == "deepsearch":
+                results = await self._deepsearch(query, instrument)
+                sentiment = self._analyze_results_sentiment(
+                    [{"title": "", "content": r} for r in results] if isinstance(results, list) else []
+                )
+            else:
+                results = await self._search(enhanced_query, max_results)
+                sentiment = self._analyze_results_sentiment(results)
 
             data = {
                 "query": enhanced_query,
@@ -105,13 +118,13 @@ class SearchTool(BaseTool):
                 "results": results,
                 "result_count": len(results),
                 "sentiment_summary": sentiment,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
             # Cache results
             self._cache[cache_key] = {
                 "data": data,
-                "timestamp": datetime.utcnow()
+                "timestamp": datetime.now(timezone.utc)
             }
 
             return ToolResult(
@@ -267,7 +280,7 @@ class SearchTool(BaseTool):
         """Get cached result if still valid."""
         if key in self._cache:
             cached = self._cache[key]
-            age = (datetime.utcnow() - cached["timestamp"]).total_seconds()
+            age = (datetime.now(timezone.utc) - cached["timestamp"]).total_seconds()
             if age < self._cache_ttl:
                 return cached["data"]
             else:
@@ -300,9 +313,67 @@ class SearchTool(BaseTool):
             "results": results,
             "result_count": len(results),
             "sentiment_summary": {"score": 0, "bias": "neutral", "confidence": 20},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "fallback": True
         }
+
+    async def _deepsearch(
+        self, query: str, instrument: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Perform deep research using Jina DeepSearch API.
+        Uses the OpenAI-compatible endpoint at deepsearch.jina.ai.
+        Best for complex market analysis questions.
+        """
+        if not self.api_key:
+            logger.warning("DeepSearch requires JINA_API_KEY")
+            return []
+
+        instrument_context = ""
+        if instrument:
+            instrument_names = {
+                "DE40": "DAX 40 German stock index",
+                "US500": "S&P 500",
+                "EURUSD": "EUR/USD forex pair",
+                "XAUUSD": "Gold XAU/USD"
+            }
+            instrument_context = f" Focus on {instrument_names.get(instrument, instrument)}."
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+
+        payload = {
+            "model": "jina-deepsearch-v1",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": f"{query}{instrument_context} Provide key facts and trading-relevant insights."
+                }
+            ],
+            "stream": False
+        }
+
+        try:
+            timeout = aiohttp.ClientTimeout(total=60)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(
+                    self.deepsearch_url,
+                    headers=headers,
+                    json=payload
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        return [{"title": "DeepSearch Analysis", "content": content[:3000], "url": ""}]
+                    else:
+                        logger.warning(f"DeepSearch returned {response.status}")
+                        return []
+        except Exception as e:
+            logger.error(f"DeepSearch error: {e}")
+            return []
 
     async def read_url(self, url: str) -> ToolResult:
         """Read and extract content from a URL using Jina Reader."""
@@ -323,7 +394,7 @@ class SearchTool(BaseTool):
                             data={
                                 "url": url,
                                 "content": content[:5000],  # Limit content
-                                "timestamp": datetime.utcnow().isoformat()
+                                "timestamp": datetime.now(timezone.utc).isoformat()
                             }
                         )
                     else:

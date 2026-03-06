@@ -3,7 +3,7 @@ cTrader Client - Integration with cTrader Open API
 """
 import asyncio
 from typing import Any, Dict, List, Optional, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from loguru import logger
 
 try:
@@ -153,7 +153,7 @@ class CTraderClient:
                 return {
                     "bid": getattr(response, 'bid', 0) / 100000,
                     "ask": getattr(response, 'ask', 0) / 100000,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.now(timezone.utc).isoformat()
                 }
 
             return {"bid": 0, "ask": 0, "error": "No response"}

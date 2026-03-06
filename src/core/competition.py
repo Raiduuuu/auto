@@ -3,7 +3,7 @@ Competition Framework - Test multiple AI agents/strategies against each other
 Inspired by AI-Trader's multi-model competition arena
 """
 from typing import Any, Dict, List, Optional, Type
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from enum import Enum
 import asyncio
@@ -134,7 +134,7 @@ class TradingCompetition:
             raise ValueError("No competitors registered")
 
         self.status = CompetitionStatus.RUNNING
-        self.start_time = datetime.utcnow()
+        self.start_time = datetime.now(timezone.utc)
 
         logger.info(f"Competition '{self.config.name}' started with {len(self.competitors)} competitors")
 
@@ -152,7 +152,7 @@ class TradingCompetition:
 
         round_result = {
             "round": round_number,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "market_data_summary": self._summarize_market_data(market_data),
             "agent_results": {}
         }
@@ -253,7 +253,7 @@ class TradingCompetition:
         # In reality, you'd track entry/exit and calculate P&L
 
         trade = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "direction": signal.get("direction"),
             "confidence": signal.get("confidence", 0),
             "entry_price": signal.get("entry_price"),
@@ -282,7 +282,7 @@ class TradingCompetition:
         return {
             "instrument": data.get("instrument", self.config.instrument),
             "current_price": data.get("current_price"),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     def _summarize_analysis(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
@@ -299,7 +299,7 @@ class TradingCompetition:
         """Check if competition should end."""
         # Check duration
         if self.config.duration_hours and self.start_time:
-            elapsed = datetime.utcnow() - self.start_time
+            elapsed = datetime.now(timezone.utc) - self.start_time
             if elapsed.total_seconds() / 3600 >= self.config.duration_hours:
                 return True
 
@@ -312,7 +312,7 @@ class TradingCompetition:
     async def end(self) -> None:
         """End the competition."""
         self.status = CompetitionStatus.COMPLETED
-        self.end_time = datetime.utcnow()
+        self.end_time = datetime.now(timezone.utc)
 
         logger.info(f"Competition '{self.config.name}' completed after {self.rounds_completed} rounds")
 
@@ -350,7 +350,7 @@ class TradingCompetition:
         """Get overall competition summary."""
         duration = None
         if self.start_time:
-            end = self.end_time or datetime.utcnow()
+            end = self.end_time or datetime.now(timezone.utc)
             duration = (end - self.start_time).total_seconds()
 
         return {
@@ -398,7 +398,7 @@ async def run_quick_competition(
     Convenience function for running short competitions.
     """
     config = CompetitionConfig(
-        name=f"Quick-{datetime.utcnow().strftime('%Y%m%d-%H%M')}",
+        name=f"Quick-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M')}",
         instrument=instrument,
         max_rounds=rounds,
         round_interval_seconds=1

@@ -3,7 +3,7 @@ Autonomous Trading Agent - Pure tool-driven trading agent
 Inspired by AI-Trader's zero-preset-strategy approach
 """
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 import json
 from loguru import logger
@@ -22,7 +22,7 @@ class AgentThought:
     tool: Optional[str] = None
     tool_params: Optional[Dict[str, Any]] = None
     observation: Optional[str] = None
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 @dataclass
@@ -183,7 +183,7 @@ Be decisive but prudent. Quality trades over quantity."""
                 "analysis": analysis_results,
                 "signal": signal,
                 "thought_chain": [t.__dict__ for t in self.thought_chain],
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
         except Exception as e:
@@ -563,7 +563,7 @@ Ask: {quote.get('ask', 'N/A')}
 
         # Record trade
         self.trading_history.append({
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "plan": trade_plan.__dict__,
             "result": result.to_dict()
         })

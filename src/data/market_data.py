@@ -2,8 +2,8 @@
 Market Data Provider - Handles market data retrieval and caching
 """
 import asyncio
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict, List, Optional
 import pandas as pd
 from loguru import logger
 
@@ -33,7 +33,7 @@ class MarketDataProvider:
         # Check cache
         if cache_key in self.cache:
             cached = self.cache[cache_key]
-            if datetime.utcnow() - cached["timestamp"] < timedelta(seconds=self.cache_ttl):
+            if datetime.now(timezone.utc) - cached["timestamp"] < timedelta(seconds=self.cache_ttl):
                 return cached["data"]
 
         # Fetch from cTrader
@@ -55,7 +55,7 @@ class MarketDataProvider:
         # Cache the data
         self.cache[cache_key] = {
             "data": df,
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         }
 
         return df
@@ -73,7 +73,7 @@ class MarketDataProvider:
             "bid": 18500.0,
             "ask": 18501.0,
             "spread": 1.0,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     async def get_account_info(self) -> Dict[str, Any]:
@@ -106,7 +106,7 @@ class MarketDataProvider:
         import numpy as np
 
         base_price = 18500.0
-        dates = pd.date_range(end=datetime.utcnow(), periods=periods, freq='H')
+        dates = pd.date_range(end=datetime.now(timezone.utc), periods=periods, freq='h')
 
         # Generate random walk
         returns = np.random.normal(0, 0.001, periods)
@@ -130,7 +130,7 @@ class MarketDataProvider:
     async def subscribe_to_prices(
         self,
         instruments: List[str],
-        callback: callable
+        callback: Callable
     ) -> None:
         """Subscribe to real-time price updates."""
         if self.ctrader_client:
